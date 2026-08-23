@@ -19,6 +19,7 @@ fn main() -> eframe::Result {
 struct MyApp {
     texture: Option<egui::TextureHandle>,
     texture_name: Option<String>,
+    image: Option<image::DynamicImage>,
 }
 
 impl MyApp {
@@ -51,6 +52,23 @@ impl MyApp {
             image_to_render,
             Default::default(),
         ));
+        self.image = Some(loaded_image);
+    }
+
+    fn save_image(&mut self) {
+        let Some(image) = &self.image else {
+            return;
+        };
+
+        let Some(save_path) = rfd::FileDialog::new()
+            .add_filter("image", &["jpg", "png"])
+            .set_file_name(self.texture_name.as_deref().unwrap_or("image.png"))
+            .save_file()
+        else {
+            return;
+        };
+
+        image.save(save_path).unwrap();
     }
 }
 
@@ -60,6 +78,11 @@ impl eframe::App for MyApp {
             ui.menu_button("File", |ui| {
                 if ui.button("Load Image").clicked() {
                     self.load_texture(ui);
+                } else if ui
+                    .add_enabled(self.image.is_some(), egui::Button::new("Save Image"))
+                    .clicked()
+                {
+                    self.save_image();
                 } else if ui.button("Quit").clicked() {
                     ui.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
