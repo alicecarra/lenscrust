@@ -24,6 +24,7 @@ struct MyApp {
     edited_image: Option<image::DynamicImage>,
 
     quantization_levels: u32,
+    jpeg_quality: u8,
 }
 
 impl Default for MyApp {
@@ -35,6 +36,7 @@ impl Default for MyApp {
             edited_texture: None,
             edited_image: None,
             quantization_levels: 256,
+            jpeg_quality: 85,
         }
     }
 }
@@ -102,7 +104,18 @@ impl MyApp {
             return;
         };
 
-        image.save(save_path).unwrap();
+        let is_jpeg = save_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg"));
+
+        if is_jpeg {
+            let file = std::fs::File::create(&save_path).unwrap();
+            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(file, self.jpeg_quality);
+            image.write_with_encoder(encoder).unwrap();
+        } else {
+            image.save(save_path).unwrap();
+        }
     }
 }
 
@@ -176,6 +189,13 @@ impl eframe::App for MyApp {
                         ui.add(egui::Slider::new(&mut self.quantization_levels, 1..=256));
                     });
                     if ui.button("Apply Quantization").clicked() {}
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("JPEG quality:");
+                        ui.add(egui::Slider::new(&mut self.jpeg_quality, 1..=100));
+                    });
                 });
             });
     }
