@@ -111,7 +111,8 @@ impl MyApp {
 
         if is_jpeg {
             let file = std::fs::File::create(&save_path).unwrap();
-            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(file, self.jpeg_quality);
+            let encoder =
+                image::codecs::jpeg::JpegEncoder::new_with_quality(file, self.jpeg_quality);
             image.write_with_encoder(encoder).unwrap();
         } else {
             image.save(save_path).unwrap();
@@ -142,7 +143,7 @@ impl eframe::App for MyApp {
 
         if let Some(texture) = &self.loaded_texture {
             egui::Window::new("Original")
-                .default_pos([20.0, 60.0])
+                .default_pos([20.0, 300.0])
                 .default_size([400.0, 400.0])
                 .show(ui.ctx(), |ui| {
                     egui::ScrollArea::both()
@@ -156,7 +157,7 @@ impl eframe::App for MyApp {
 
         if let Some(texture) = &self.edited_texture {
             egui::Window::new("Edited")
-                .default_pos([440.0, 60.0])
+                .default_pos([440.0, 300.0])
                 .default_size([400.0, 400.0])
                 .show(ui.ctx(), |ui| {
                     egui::ScrollArea::both()
@@ -169,7 +170,7 @@ impl eframe::App for MyApp {
         }
 
         egui::Window::new("Controls")
-            .default_pos([20.0, 480.0])
+            .default_pos([20.0, 20.0])
             .show(ui.ctx(), |ui| {
                 ui.add_enabled_ui(self.loaded_image.is_some(), |ui| {
                     if ui.button("Mirror Horizontal").clicked() {
@@ -180,7 +181,10 @@ impl eframe::App for MyApp {
                         mirror_vertical(self.edited_image.as_mut().unwrap());
                         self.update_edited_texture(ui.ctx());
                     }
-                    if ui.button("Grayscale").clicked() {}
+                    if ui.button("Luminance").clicked() {
+                        luminance(self.edited_image.as_mut().unwrap());
+                        self.update_edited_texture(ui.ctx());
+                    }
 
                     ui.separator();
 
@@ -201,6 +205,7 @@ impl eframe::App for MyApp {
     }
 }
 
+// TODO: make operation inplace
 fn mirror_horizontal(image: &mut image::DynamicImage) {
     let image_copy = image.clone();
     let image_width = image.width();
@@ -212,13 +217,27 @@ fn mirror_horizontal(image: &mut image::DynamicImage) {
     }
 }
 
+// TODO: make operation inplace
 fn mirror_vertical(image: &mut image::DynamicImage) {
     let image_copy = image.clone();
-    // let image_width = image.width();
     let image_higth = image.height();
 
     let pixels = image_copy.pixels();
     for (x, y, pixel) in pixels {
         image.put_pixel(x, image_higth - y - 1, pixel);
+    }
+}
+
+// TODO: maybe use DynamicImage::ImageLuma8 variation for better representation
+fn luminance(image: &mut image::DynamicImage) {
+    for x in 0..image.width() {
+        for y in 0..image.height() {
+            let pixel = image.get_pixel(x, y);
+            let gray_pixel =
+                (pixel[0] as f64 * 0.299 + pixel[1] as f64 * 0.587 + pixel[2] as f64 * 0.114)
+                    .round() as u8;
+            let gray_pixel = image::Rgba([gray_pixel, gray_pixel, gray_pixel, pixel[3]]);
+            image.put_pixel(x, y, gray_pixel);
+        }
     }
 }
