@@ -239,17 +239,27 @@ fn mirror_vertical(image: &mut image::DynamicImage) {
 
 // TODO: maybe use DynamicImage::ImageLuma8 variation for better representation
 fn luminance(image: &mut image::DynamicImage) {
-    let mut gray = image::GrayImage::new(image.width(), image.height());
-    for x in 0..image.width() {
-        for y in 0..image.height() {
-            let pixel = image.get_pixel(x, y);
-            let gray_pixel =
-                (pixel[0] as f64 * 0.299 + pixel[1] as f64 * 0.587 + pixel[2] as f64 * 0.114)
-                    .round() as u8;
-            gray.put_pixel(x, y, image::Luma([gray_pixel]));
+    match image {
+        // already on grayscale, do nothing
+        image::DynamicImage::ImageLuma8(..)
+        | image::DynamicImage::ImageLumaA8(..)
+        | image::DynamicImage::ImageLuma16(..)
+        | image::DynamicImage::ImageLumaA16(..) => return,
+        _ => {
+            let mut gray = image::GrayImage::new(image.width(), image.height());
+            for x in 0..image.width() {
+                for y in 0..image.height() {
+                    let pixel = image.get_pixel(x, y);
+                    let gray_pixel = (pixel[0] as f64 * 0.299
+                        + pixel[1] as f64 * 0.587
+                        + pixel[2] as f64 * 0.114)
+                        .round() as u8;
+                    gray.put_pixel(x, y, image::Luma([gray_pixel]));
+                }
+            }
+            *image = image::DynamicImage::ImageLuma8(gray);
         }
     }
-    *image = image::DynamicImage::ImageLuma8(gray);
 }
 
 fn quantize(image: &mut image::DynamicImage, levels: u16) {
