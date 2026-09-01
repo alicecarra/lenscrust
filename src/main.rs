@@ -192,7 +192,16 @@ impl eframe::App for MyApp {
                         ui.label("Quantization levels:");
                         ui.add(egui::Slider::new(&mut self.quantization_levels, 1..=256));
                     });
-                    if ui.button("Apply Quantization").clicked() {}
+                    if ui.button("Apply Quantization").clicked() {
+                        // force image to be in grayscale
+                        luminance(self.edited_image.as_mut().unwrap());
+
+                        quantize(
+                            self.edited_image.as_mut().unwrap(),
+                            self.quantization_levels,
+                        );
+                        self.update_edited_texture(ui.ctx());
+                    }
 
                     ui.separator();
 
@@ -230,14 +239,50 @@ fn mirror_vertical(image: &mut image::DynamicImage) {
 
 // TODO: maybe use DynamicImage::ImageLuma8 variation for better representation
 fn luminance(image: &mut image::DynamicImage) {
+    let mut gray = image::GrayImage::new(image.width(), image.height());
     for x in 0..image.width() {
         for y in 0..image.height() {
             let pixel = image.get_pixel(x, y);
             let gray_pixel =
                 (pixel[0] as f64 * 0.299 + pixel[1] as f64 * 0.587 + pixel[2] as f64 * 0.114)
                     .round() as u8;
-            let gray_pixel = image::Rgba([gray_pixel, gray_pixel, gray_pixel, pixel[3]]);
-            image.put_pixel(x, y, gray_pixel);
+            gray.put_pixel(x, y, image::Luma([gray_pixel]));
         }
+    }
+    *image = image::DynamicImage::ImageLuma8(gray);
+}
+
+fn quantize(image: &mut image::DynamicImage, levels: u16) {
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+
+    // maybe use a more idiomatic way?
+    let mut min_tone = 255;
+    let mut max_tone = 0;
+    for pixel in luma_image.pixels() {
+        let pixel = pixel[0];
+        if pixel > max_tone {
+            max_tone = pixel;
+        } else if pixel < min_tone {
+            min_tone = pixel;
+        }
+    }
+    // sanity check
+    assert!(max_tone >= min_tone);
+
+    let tone_range_size = (max_tone - min_tone) as u16 + 1;
+
+    if levels >= tone_range_size {
+        // maybe give feedback to user?
+        return;
+    }
+
+    let bin_width = tone_range_size as f64 / levels as f64;
+
+    for pixel in luma_image.pixels_mut() {
+        let t_orig = pixel[0] as f64;
+        let bin_index = (((t_orig - (min_tone as f64 - 0.5)) / bin_width).floor() as i64)
+            .clamp(0, levels as i64 - 1);
+        let quantized_tone = (min_tone as f64 - 0.5) + (bin_index as f64 + 0.5) * bin_width;
+        pixel[0] = quantized_tone.round() as u8;
     }
 }
