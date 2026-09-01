@@ -23,7 +23,7 @@ struct MyApp {
     edited_texture: Option<egui::TextureHandle>,
     edited_image: Option<image::DynamicImage>,
 
-    quantization_levels: u32,
+    quantization_levels: u16,
     jpeg_quality: u8,
 }
 
@@ -131,8 +131,6 @@ impl eframe::App for MyApp {
                     .clicked()
                 {
                     self.save_image();
-                } else if ui.button("Reset").clicked() {
-                    self.reset_edited_image();
                 } else if ui.button("Quit").clicked() {
                     ui.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -144,11 +142,11 @@ impl eframe::App for MyApp {
         if let Some(texture) = &self.loaded_texture {
             egui::Window::new("Original")
                 .default_pos([20.0, 300.0])
-                .default_size([400.0, 400.0])
+                .auto_sized()
                 .show(ui.ctx(), |ui| {
                     egui::ScrollArea::both()
                         .id_salt("original_scroll")
-                        .auto_shrink([false, false])
+                        .auto_shrink([true, true])
                         .show(ui, |ui| {
                             ui.image(texture);
                         });
@@ -158,11 +156,11 @@ impl eframe::App for MyApp {
         if let Some(texture) = &self.edited_texture {
             egui::Window::new("Edited")
                 .default_pos([440.0, 300.0])
-                .default_size([400.0, 400.0])
+                .auto_sized()
                 .show(ui.ctx(), |ui| {
                     egui::ScrollArea::both()
                         .id_salt("edited_scroll")
-                        .auto_shrink([false, false])
+                        .auto_shrink([true, true])
                         .show(ui, |ui| {
                             ui.image(texture);
                         });
@@ -173,6 +171,12 @@ impl eframe::App for MyApp {
             .default_pos([20.0, 20.0])
             .show(ui.ctx(), |ui| {
                 ui.add_enabled_ui(self.loaded_image.is_some(), |ui| {
+                    if ui.button("Reset").clicked() {
+                        self.reset_edited_image();
+                    }
+
+                    ui.separator();
+
                     if ui.button("Mirror Horizontal").clicked() {
                         mirror_horizontal(self.edited_image.as_mut().unwrap());
                         self.update_edited_texture(ui.ctx());
@@ -240,7 +244,6 @@ fn mirror_vertical(image: &mut image::DynamicImage) {
     }
 }
 
-// TODO: maybe use DynamicImage::ImageLuma8 variation for better representation
 fn luminance(image: &mut image::DynamicImage) {
     match image {
         // already on grayscale, do nothing
