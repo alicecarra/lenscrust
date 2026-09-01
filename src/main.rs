@@ -214,26 +214,29 @@ impl eframe::App for MyApp {
     }
 }
 
-// TODO: make operation inplace
 fn mirror_horizontal(image: &mut image::DynamicImage) {
-    let image_copy = image.clone();
-    let image_width = image.width();
-    // let image_hight = image.height();
+    let (width, height) = image.dimensions();
 
-    let pixels = image_copy.pixels();
-    for (x, y, pixel) in pixels {
-        image.put_pixel(image_width - x - 1, y, pixel);
+    for y in 0..height {
+        for x in 0..width / 2 {
+            let left = image.get_pixel(x, y);
+            let right = image.get_pixel(width - 1 - x, y);
+            image.put_pixel(x, y, right);
+            image.put_pixel(width - 1 - x, y, left);
+        }
     }
 }
 
-// TODO: make operation inplace
 fn mirror_vertical(image: &mut image::DynamicImage) {
-    let image_copy = image.clone();
-    let image_higth = image.height();
+    let (width, height) = image.dimensions();
 
-    let pixels = image_copy.pixels();
-    for (x, y, pixel) in pixels {
-        image.put_pixel(x, image_higth - y - 1, pixel);
+    for y in 0..height / 2 {
+        for x in 0..width {
+            let top = image.get_pixel(x, y);
+            let bottom = image.get_pixel(x, height - 1 - y);
+            image.put_pixel(x, y, bottom);
+            image.put_pixel(x, height - 1 - y, top);
+        }
     }
 }
 
