@@ -278,7 +278,8 @@ fn quantize(image: &mut image::DynamicImage, levels: u16) {
         let pixel = pixel[0];
         if pixel > max_tone {
             max_tone = pixel;
-        } else if pixel < min_tone {
+        }
+        if pixel < min_tone {
             min_tone = pixel;
         }
     }
@@ -435,16 +436,15 @@ mod tests {
     }
 
     #[test]
-    fn quantize_min_tracking_bug_causes_panic() {
-        // Known bug: the min/max scan uses `if pixel > max_tone { .. } else if
-        // pixel < min_tone { .. }`. On the very first pixel, max_tone starts
-        // at 0, so any nonzero first pixel takes the `if` branch and updates
-        // max_tone WITHOUT ever checking whether it's also the minimum. If
-        // that first pixel happens to be the image's true minimum (as here,
-        // 10 with no smaller pixel afterwards), min_tone is left at its
-        // initial value of 255, and the later `assert!(max_tone >= min_tone)`
-        // panics even though 10..=200 is a perfectly valid tone range.
+    fn quantize_tracks_min_even_when_first_pixel_is_the_minimum() {
+        // Regression test: the min/max scan used to use `if .. else if ..`,
+        // so a nonzero first pixel that was also the true minimum (like 10
+        // here) never got checked against min_tone, leaving it stuck at 255
+        // and crashing the later `assert!(max_tone >= min_tone)`.
         let mut img = make_gray_image(2, 1, &[10, 200]);
-        quantize(&mut img, 200);
+        quantize(&mut img, 200); // tone_range_size = 191, levels(200) >= it -> no-op
+        let gray = img.as_luma8().unwrap();
+        assert_eq!(gray.get_pixel(0, 0)[0], 10);
+        assert_eq!(gray.get_pixel(1, 0)[0], 200);
     }
 }
