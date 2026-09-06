@@ -9,3 +9,4 @@ egui = "0.36.1"
 egui_extras = {version= "0.36.1", features = ["image", "file"] }
 image = "0.25.10"
 rfd = "0.17.2"
+thiserror = "2.0.20"
