@@ -1,6 +1,6 @@
 mod app;
 mod errors;
-mod ops;
+mod operations;
 
 use app::App;
 

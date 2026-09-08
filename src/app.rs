@@ -1,7 +1,63 @@
 use image::{DynamicImage, ImageReader};
 
 use crate::errors::AppError;
-use crate::ops::Operation;
+use crate::operations::{Kernel, Operation};
+
+const IDENTITY_KERNEL: [[f64; 3]; 3] = [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]];
+
+#[derive(Clone, Copy, PartialEq)]
+enum ConvolutionKernelType {
+    GaussianLowPass,
+    LaplacianHighPass,
+    GenericHighPass,
+    PrewittHorizontalGradient,
+    PrewittVerticalGradient,
+    SobelHorizontalGradient,
+    SobelVerticalGradient,
+    Custom,
+}
+
+impl ConvolutionKernelType {
+    const ALL: [ConvolutionKernelType; 8] = [
+        ConvolutionKernelType::GaussianLowPass,
+        ConvolutionKernelType::LaplacianHighPass,
+        ConvolutionKernelType::GenericHighPass,
+        ConvolutionKernelType::PrewittHorizontalGradient,
+        ConvolutionKernelType::PrewittVerticalGradient,
+        ConvolutionKernelType::SobelHorizontalGradient,
+        ConvolutionKernelType::SobelVerticalGradient,
+        ConvolutionKernelType::Custom,
+    ];
+
+    fn label(&self) -> &'static str {
+        match self {
+            ConvolutionKernelType::GaussianLowPass => "Gaussian (low-pass / blur)",
+            ConvolutionKernelType::LaplacianHighPass => "Laplacian (high-pass)",
+            ConvolutionKernelType::GenericHighPass => "Generic high-pass",
+            ConvolutionKernelType::PrewittHorizontalGradient => "Prewitt horizontal gradient",
+            ConvolutionKernelType::PrewittVerticalGradient => "Prewitt vertical gradient",
+            ConvolutionKernelType::SobelHorizontalGradient => "Sobel horizontal gradient",
+            ConvolutionKernelType::SobelVerticalGradient => "Sobel vertical gradient",
+            ConvolutionKernelType::Custom => "Custom",
+        }
+    }
+
+    fn to_kernel(self, custom_weights: [[f64; 3]; 3]) -> Kernel {
+        match self {
+            ConvolutionKernelType::GaussianLowPass => Kernel::GAUSSIAN_LOW_PASS,
+            ConvolutionKernelType::LaplacianHighPass => Kernel::POSITIVE_LAPLACIAN_HIGH_PASS,
+            ConvolutionKernelType::GenericHighPass => Kernel::NEGATIVE_LAPLACIAN_HIGH_PASS,
+            ConvolutionKernelType::PrewittHorizontalGradient => Kernel::PREWITT_HORIZONTAL_GRADIENT,
+            ConvolutionKernelType::PrewittVerticalGradient => Kernel::PREWITT_VERTICAL_GRADIENT,
+            ConvolutionKernelType::SobelHorizontalGradient => Kernel::SOBEL_HORIZONTAL_GRADIENT,
+            ConvolutionKernelType::SobelVerticalGradient => Kernel::SOBEL_VERTICAL_GRADIENT,
+            ConvolutionKernelType::Custom => Kernel {
+                weights: custom_weights,
+                bias_before_clamping: false,
+            },
+        }
+    }
+}
 
 #[derive(Default)]
 struct ImageSlot {
@@ -23,6 +79,9 @@ pub struct App {
     quantization_levels: u16,
     jpeg_quality: u8,
 
+    convolution_kernel_choice: ConvolutionKernelType,
+    custom_convolution_weights: [[f64; 3]; 3],
+
     last_error: Option<AppError>,
 }
 
@@ -34,6 +93,8 @@ impl Default for App {
             edited: ImageSlot::default(),
             quantization_levels: 256,
             jpeg_quality: 85,
+            convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
+            custom_convolution_weights: IDENTITY_KERNEL,
             last_error: None,
         }
     }
@@ -66,9 +127,10 @@ impl App {
             name: name.clone(),
             source,
         })?;
-        let loaded_image = reader
-            .decode()
-            .map_err(|source| AppError::DecodeImage { name: name.clone(), source })?;
+        let loaded_image = reader.decode().map_err(|source| AppError::DecodeImage {
+            name: name.clone(),
+            source,
+        })?;
 
         self.loaded_name = Some(name);
 
@@ -124,7 +186,8 @@ impl App {
 
         if is_jpeg {
             let file = std::fs::File::create(&save_path).map_err(AppError::CreateFile)?;
-            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(file, self.jpeg_quality);
+            let encoder =
+                image::codecs::jpeg::JpegEncoder::new_with_quality(file, self.jpeg_quality);
             image
                 .write_with_encoder(encoder)
                 .map_err(AppError::SaveImage)?;
@@ -233,6 +296,44 @@ impl eframe::App for App {
                             ui.ctx(),
                             Operation::Quantize(self.quantization_levels),
                         );
+                    }
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Convolution kernel:");
+                        egui::ComboBox::from_id_salt("convolution_kernel_choice")
+                            .selected_text(self.convolution_kernel_choice.label())
+                            .show_ui(ui, |ui| {
+                                for choice in ConvolutionKernelType::ALL {
+                                    ui.selectable_value(
+                                        &mut self.convolution_kernel_choice,
+                                        choice,
+                                        choice.label(),
+                                    );
+                                }
+                            });
+                    });
+                    if self.convolution_kernel_choice == ConvolutionKernelType::Custom {
+                        egui::Grid::new("custom_convolution_kernel_3x3_grid").show(ui, |ui| {
+                            for row in 0..3 {
+                                for column in 0..3 {
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.custom_convolution_weights[row][column],
+                                        )
+                                        .speed(0.05),
+                                    );
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    }
+                    if ui.button("Apply Convolution").clicked() {
+                        let kernel = self
+                            .convolution_kernel_choice
+                            .to_kernel(self.custom_convolution_weights);
+                        self.apply_operation(ui.ctx(), Operation::Convolve(kernel));
                     }
 
                     ui.separator();
