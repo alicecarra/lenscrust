@@ -49,7 +49,7 @@ impl Kernel {
 
 pub fn convolve(image: &mut DynamicImage, kernel: &Kernel) {
     // TODO: suppoert color images
-    super::luminance(image);
+    super::point::luminance(image);
 
     let (image_width, image_height) = image.dimensions();
     if image_width < 3 || image_height < 3 {
