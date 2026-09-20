@@ -83,6 +83,9 @@ pub struct App {
     brightness_delta: i16,
     contrast_factor: f64,
 
+    zoom_out_factor_x: f64,
+    zoom_out_factor_y: f64,
+
     convolution_kernel_choice: ConvolutionKernelType,
     custom_convolution_weights: [[f64; 3]; 3],
 
@@ -103,6 +106,8 @@ impl Default for App {
             jpeg_quality: 85,
             brightness_delta: 0,
             contrast_factor: 1.0,
+            zoom_out_factor_x: 2.0,
+            zoom_out_factor_y: 2.0,
             convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
             custom_convolution_weights: IDENTITY_KERNEL,
             histogram: None,
@@ -385,6 +390,9 @@ impl eframe::App for App {
                             self.last_error = Some(err);
                         }
                     }
+                });
+
+                ui.horizontal(|ui| {
                     if ui.button("Load Reference Image").clicked() {
                         if let Err(err) = self.load_reference_image(ui) {
                             self.last_error = Some(err);
@@ -432,6 +440,30 @@ impl eframe::App for App {
                     if ui.button("Rotate 90° Counterclockwise").clicked() {
                         self.apply_operation(ui.ctx(), Operation::RotateCounterclockwise);
                     }
+
+                    ui.horizontal(|ui| {
+                        ui.label("Zoom out factor X:");
+                        ui.add(egui::Slider::new(&mut self.zoom_out_factor_x, 1.0..=10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Zoom out factor Y:");
+                        ui.add(egui::Slider::new(&mut self.zoom_out_factor_y, 1.0..=10.0));
+                    });
+                    if ui.button("Apply Zoom Out").clicked() {
+                        self.apply_operation(
+                            ui.ctx(),
+                            Operation::ZoomOut {
+                                factor_x: self.zoom_out_factor_x,
+                                factor_y: self.zoom_out_factor_y,
+                            },
+                        );
+                    }
+                    if ui.button("Apply Zoom In (2x2)").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::ZoomIn);
+                    }
+
+                    ui.separator();
+
                     if ui.button("Luminance").clicked() {
                         self.apply_operation(ui.ctx(), Operation::Luminance);
                     }

@@ -13,6 +13,8 @@ pub enum Operation {
     MirrorVertical,
     RotateClockwise,
     RotateCounterclockwise,
+    ZoomOut { factor_x: f64, factor_y: f64 },
+    ZoomIn,
     Luminance,
     Quantize(u16),
     Negative,
@@ -30,6 +32,10 @@ impl Operation {
             Operation::MirrorVertical => geometry::mirror_vertical(image),
             Operation::RotateClockwise => geometry::rotate_90_clockwise(image),
             Operation::RotateCounterclockwise => geometry::rotate_90_counterclockwise(image),
+            Operation::ZoomOut { factor_x, factor_y } => {
+                geometry::zoom_out(image, *factor_x, *factor_y)
+            }
+            Operation::ZoomIn => geometry::zoom_in(image),
             Operation::Luminance => point::luminance(image),
             Operation::Quantize(levels) => {
                 // quantize only works on grayscale images
