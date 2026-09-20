@@ -75,6 +75,7 @@ pub struct App {
     loaded: ImageSlot,
     loaded_name: Option<String>,
     edited: ImageSlot,
+    reference: ImageSlot,
 
     quantization_levels: u16,
     jpeg_quality: u8,
@@ -97,6 +98,7 @@ impl Default for App {
             loaded: ImageSlot::default(),
             loaded_name: None,
             edited: ImageSlot::default(),
+            reference: ImageSlot::default(),
             quantization_levels: 256,
             jpeg_quality: 85,
             brightness_delta: 0,
@@ -114,6 +116,40 @@ fn to_color_image(image: &DynamicImage) -> egui::ColorImage {
     let size = [image.width() as usize, image.height() as usize];
     let rgba = image.to_rgba8();
     egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_flat_samples().as_slice())
+}
+
+fn pick_and_decode_image() -> Result<Option<(String, DynamicImage)>, AppError> {
+    let current_dir = std::env::current_dir().map_err(AppError::CurrentDir)?;
+
+    let Some(image_path) = rfd::FileDialog::new()
+        .add_filter("image", &["jpg", "png"])
+        .set_directory(&current_dir)
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+
+    let name = image_path
+        .file_name()
+        .map(|name| name.display().to_string())
+        .unwrap_or_else(|| "image".to_string());
+
+    let reader = ImageReader::open(&image_path).map_err(|source| AppError::OpenImage {
+        name: name.clone(),
+        source,
+    })?;
+    let decoded_image = reader.decode().map_err(|source| AppError::DecodeImage {
+        name: name.clone(),
+        source,
+    })?;
+
+    Ok(Some((name, decoded_image)))
+}
+
+fn load_texture_for(ui: &egui::Ui, label: &str, image: &DynamicImage) -> egui::TextureHandle {
+    let color_image = to_color_image(image);
+    ui.ctx()
+        .load_texture(label, color_image, Default::default())
 }
 
 fn render_histogram(ui: &mut egui::Ui, histogram: &[u32; 256]) {
@@ -143,41 +179,32 @@ fn render_histogram(ui: &mut egui::Ui, histogram: &[u32; 256]) {
 
 impl App {
     fn load_image(&mut self, ui: &mut egui::Ui) -> Result<(), AppError> {
-        let current_dir = std::env::current_dir().map_err(AppError::CurrentDir)?;
-
-        let Some(image_path) = rfd::FileDialog::new()
-            .add_filter("image", &["jpg", "png"])
-            .set_directory(&current_dir)
-            .pick_file()
-        else {
+        let Some((name, decoded_image)) = pick_and_decode_image()? else {
             return Ok(());
         };
 
-        let name = image_path
-            .file_name()
-            .map(|name| name.display().to_string())
-            .unwrap_or_else(|| "image".to_string());
-
-        let reader = ImageReader::open(&image_path).map_err(|source| AppError::OpenImage {
-            name: name.clone(),
-            source,
-        })?;
-        let loaded_image = reader.decode().map_err(|source| AppError::DecodeImage {
-            name: name.clone(),
-            source,
-        })?;
-
+        let texture = load_texture_for(ui, "loaded", &decoded_image);
         self.loaded_name = Some(name);
-
-        let image_to_render = to_color_image(&loaded_image);
-        self.loaded.texture = Some(ui.ctx().load_texture(
-            self.loaded_name.as_deref().unwrap_or("image"),
-            image_to_render,
-            Default::default(),
-        ));
-        self.loaded_histogram = Some(compute_histogram(&loaded_image));
-        self.loaded.image = Some(loaded_image);
+        self.loaded_histogram = Some(compute_histogram(&decoded_image));
+        self.loaded.image = Some(decoded_image);
+        self.loaded.texture = Some(texture);
         self.reset_edited_image();
+
+        Ok(())
+    }
+
+    fn load_reference_image(&mut self, ui: &mut egui::Ui) -> Result<(), AppError> {
+        let Some((_name, mut decoded_image)) = pick_and_decode_image()? else {
+            return Ok(());
+        };
+
+        // the reference image is only ever used for grayscale histogram
+        // matching, so keep its preview consistent with what's actually used
+        Operation::Luminance.apply(&mut decoded_image);
+        let texture = load_texture_for(ui, "reference", &decoded_image);
+
+        self.reference.image = Some(decoded_image);
+        self.reference.texture = Some(texture);
 
         Ok(())
     }
@@ -313,6 +340,20 @@ impl eframe::App for App {
                 });
         }
 
+        if let Some(texture) = &self.reference.texture {
+            egui::Window::new("Reference")
+                .default_pos([780.0, 300.0])
+                .auto_sized()
+                .show(ui.ctx(), |ui| {
+                    egui::ScrollArea::both()
+                        .id_salt("reference_scroll")
+                        .auto_shrink([true, true])
+                        .show(ui, |ui| {
+                            ui.image(texture);
+                        });
+                });
+        }
+
         if let Some(histogram) = &self.loaded_histogram {
             egui::Window::new("Original Histogram (Grayscale)")
                 .default_pos([440.0, 20.0])
@@ -341,6 +382,11 @@ impl eframe::App for App {
                         .clicked()
                     {
                         if let Err(err) = self.save_image() {
+                            self.last_error = Some(err);
+                        }
+                    }
+                    if ui.button("Load Reference Image").clicked() {
+                        if let Err(err) = self.load_reference_image(ui) {
                             self.last_error = Some(err);
                         }
                     }
@@ -431,6 +477,20 @@ impl eframe::App for App {
 
                     if ui.button("Equalize Histogram").clicked() {
                         self.apply_operation(ui.ctx(), Operation::EqualizeHistogram);
+                    }
+                    if ui
+                        .add_enabled(
+                            self.reference.is_some(),
+                            egui::Button::new("Match Histogram"),
+                        )
+                        .clicked()
+                    {
+                        if let Some(reference_image) = self.reference.image.clone() {
+                            self.apply_operation(
+                                ui.ctx(),
+                                Operation::MatchHistogram(reference_image),
+                            );
+                        }
                     }
 
                     ui.separator();

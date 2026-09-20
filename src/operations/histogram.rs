@@ -36,6 +36,56 @@ pub(super) fn equalize_histogram(image: &mut DynamicImage) {
     }
 }
 
+pub(super) fn match_histogram(image: &mut DynamicImage, reference: &DynamicImage) {
+    super::point::luminance(image);
+
+    let source_histogram = compute_histogram(image);
+    let reference_histogram = compute_histogram(reference);
+
+    let source_total_pixel_count: u32 = source_histogram.iter().sum();
+    let reference_total_pixel_count: u32 = reference_histogram.iter().sum();
+    if source_total_pixel_count == 0 || reference_total_pixel_count == 0 {
+        return;
+    }
+
+    let source_cumulative_distribution =
+        normalized_cumulative_distribution(&source_histogram, source_total_pixel_count);
+    let reference_cumulative_distribution =
+        normalized_cumulative_distribution(&reference_histogram, reference_total_pixel_count);
+
+    let mut tone_mapping = [0u8; 256];
+    for (source_tone, &target) in source_cumulative_distribution.iter().enumerate() {
+        let mut closest_reference_tone = 0usize;
+        let mut smallest_distance = f64::MAX;
+        for (reference_tone, &candidate) in reference_cumulative_distribution.iter().enumerate() {
+            let distance = (candidate - target).abs();
+            if distance < smallest_distance {
+                smallest_distance = distance;
+                closest_reference_tone = reference_tone;
+            }
+        }
+        tone_mapping[source_tone] = closest_reference_tone as u8;
+    }
+
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+    for pixel in luma_image.pixels_mut() {
+        pixel[0] = tone_mapping[pixel[0] as usize];
+    }
+}
+
+fn normalized_cumulative_distribution(
+    histogram: &[u32; 256],
+    total_pixel_count: u32,
+) -> [f64; 256] {
+    let mut cumulative_distribution = [0.0f64; 256];
+    let mut cumulative_count = 0u32;
+    for tone in 0..256 {
+        cumulative_count += histogram[tone];
+        cumulative_distribution[tone] = cumulative_count as f64 / total_pixel_count as f64;
+    }
+    cumulative_distribution
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

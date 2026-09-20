@@ -19,6 +19,7 @@ pub enum Operation {
     Brightness(i16),
     Contrast(f64),
     EqualizeHistogram,
+    MatchHistogram(DynamicImage),
     Convolve(Kernel),
 }
 
@@ -39,6 +40,7 @@ impl Operation {
             Operation::Brightness(delta) => point::adjust_brightness(image, *delta),
             Operation::Contrast(factor) => point::adjust_contrast(image, *factor),
             Operation::EqualizeHistogram => histogram::equalize_histogram(image),
+            Operation::MatchHistogram(reference) => histogram::match_histogram(image, reference),
             Operation::Convolve(kernel) => convolution::convolve(image, kernel),
         }
     }
