@@ -9,6 +9,8 @@ pub use convolution::Kernel;
 pub enum Operation {
     MirrorHorizontal,
     MirrorVertical,
+    RotateClockwise,
+    RotateCounterclockwise,
     Luminance,
     Quantize(u16),
     Negative,
@@ -22,6 +24,8 @@ impl Operation {
         match self {
             Operation::MirrorHorizontal => geometry::mirror_horizontal(image),
             Operation::MirrorVertical => geometry::mirror_vertical(image),
+            Operation::RotateClockwise => geometry::rotate_90_clockwise(image),
+            Operation::RotateCounterclockwise => geometry::rotate_90_counterclockwise(image),
             Operation::Luminance => point::luminance(image),
             Operation::Quantize(levels) => {
                 // quantize only works on grayscale images

@@ -286,6 +286,12 @@ impl eframe::App for App {
                     if ui.button("Mirror Vertical").clicked() {
                         self.apply_operation(ui.ctx(), Operation::MirrorVertical);
                     }
+                    if ui.button("Rotate 90° Clockwise").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::RotateClockwise);
+                    }
+                    if ui.button("Rotate 90° Counterclockwise").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::RotateCounterclockwise);
+                    }
                     if ui.button("Luminance").clicked() {
                         self.apply_operation(ui.ctx(), Operation::Luminance);
                     }
