@@ -1,7 +1,7 @@
 use image::{DynamicImage, ImageReader};
 
 use crate::errors::AppError;
-use crate::operations::{Kernel, Operation};
+use crate::operations::{compute_histogram, Kernel, Operation};
 
 const IDENTITY_KERNEL: [[f64; 3]; 3] = [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]];
 
@@ -85,6 +85,8 @@ pub struct App {
     convolution_kernel_choice: ConvolutionKernelType,
     custom_convolution_weights: [[f64; 3]; 3],
 
+    histogram: Option<[u32; 256]>,
+
     last_error: Option<AppError>,
 }
 
@@ -100,6 +102,7 @@ impl Default for App {
             contrast_factor: 1.0,
             convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
             custom_convolution_weights: IDENTITY_KERNEL,
+            histogram: None,
             last_error: None,
         }
     }
@@ -154,6 +157,11 @@ impl App {
     fn reset_edited_image(&mut self) {
         self.edited.image = self.loaded.image.clone();
         self.edited.texture = self.loaded.texture.clone();
+        self.update_histogram();
+    }
+
+    fn update_histogram(&mut self) {
+        self.histogram = self.edited.image.as_ref().map(compute_histogram);
     }
 
     fn update_edited_texture(&mut self, ctx: &egui::Context) {
@@ -168,6 +176,7 @@ impl App {
         if let Some(image) = self.edited.image.as_mut() {
             operation.apply(image);
             self.update_edited_texture(ctx);
+            self.update_histogram();
         }
     }
 
@@ -270,7 +279,39 @@ impl eframe::App for App {
                 });
         }
 
-        egui::Window::new("Controls")
+        if let Some(histogram) = &self.histogram {
+            egui::Window::new("Histogram")
+                .default_pos([440.0, 20.0])
+                .default_open(false)
+                .show(ui.ctx(), |ui| {
+                    const BAR_WIDTH: f32 = 2.0;
+
+                    let max_count = histogram.iter().copied().max().unwrap_or(0).max(1) as f32;
+                    let desired_size = egui::vec2(256.0 * BAR_WIDTH, 256.0);
+                    let (rect, _response) =
+                        ui.allocate_exact_size(desired_size, egui::Sense::hover());
+
+                    let painter = ui.painter();
+                    painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+
+                    for (tone, &count) in histogram.iter().enumerate() {
+                        let bar_height = (count as f32 / max_count) * rect.height();
+                        let bar_top_left = egui::pos2(
+                            rect.left() + tone as f32 * BAR_WIDTH,
+                            rect.bottom() - bar_height,
+                        );
+                        let bar_bottom_right =
+                            egui::pos2(bar_top_left.x + BAR_WIDTH, rect.bottom());
+                        painter.rect_filled(
+                            egui::Rect::from_min_max(bar_top_left, bar_bottom_right),
+                            0.0,
+                            ui.visuals().text_color(),
+                        );
+                    }
+                });
+        }
+
+        egui::Window::new("File")
             .default_pos([20.0, 20.0])
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
@@ -299,10 +340,12 @@ impl eframe::App for App {
                     ui.label("JPEG quality:");
                     ui.add(egui::Slider::new(&mut self.jpeg_quality, 1..=100));
                 });
+            });
 
-                ui.separator();
-
-                ui.add_enabled_ui(self.loaded.is_some(), |ui| {
+        if self.loaded.is_some() {
+            egui::Window::new("Operations")
+                .default_pos([20.0, 160.0])
+                .show(ui.ctx(), |ui| {
                     if ui.button("Mirror Horizontal").clicked() {
                         self.apply_operation(ui.ctx(), Operation::MirrorHorizontal);
                     }
@@ -394,6 +437,6 @@ impl eframe::App for App {
                         self.apply_operation(ui.ctx(), Operation::Convolve(kernel));
                     }
                 });
-            });
+        }
     }
 }

@@ -2,9 +2,11 @@ use image::DynamicImage;
 
 pub mod convolution;
 mod geometry;
+pub mod histogram;
 mod point;
 
 pub use convolution::Kernel;
+pub use histogram::compute_histogram;
 
 pub enum Operation {
     MirrorHorizontal,
