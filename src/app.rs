@@ -79,6 +79,9 @@ pub struct App {
     quantization_levels: u16,
     jpeg_quality: u8,
 
+    brightness_delta: i16,
+    contrast_factor: f64,
+
     convolution_kernel_choice: ConvolutionKernelType,
     custom_convolution_weights: [[f64; 3]; 3],
 
@@ -93,6 +96,8 @@ impl Default for App {
             edited: ImageSlot::default(),
             quantization_levels: 256,
             jpeg_quality: 85,
+            brightness_delta: 0,
+            contrast_factor: 1.0,
             convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
             custom_convolution_weights: IDENTITY_KERNEL,
             last_error: None,
@@ -283,6 +288,27 @@ impl eframe::App for App {
                     }
                     if ui.button("Luminance").clicked() {
                         self.apply_operation(ui.ctx(), Operation::Luminance);
+                    }
+                    if ui.button("Negative").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::Negative);
+                    }
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Brightness:");
+                        ui.add(egui::Slider::new(&mut self.brightness_delta, -255..=255));
+                    });
+                    if ui.button("Apply Brightness").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::Brightness(self.brightness_delta));
+                    }
+
+                    ui.horizontal(|ui| {
+                        ui.label("Contrast:");
+                        ui.add(egui::Slider::new(&mut self.contrast_factor, 0.01..=5.0));
+                    });
+                    if ui.button("Apply Contrast").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::Contrast(self.contrast_factor));
                     }
 
                     ui.separator();

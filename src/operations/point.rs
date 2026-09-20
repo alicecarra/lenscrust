@@ -60,6 +60,32 @@ pub(super) fn quantize(image: &mut DynamicImage, levels: u16) {
     }
 }
 
+pub(super) fn negative(image: &mut DynamicImage) {
+    luminance(image);
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+    for pixel in luma_image.pixels_mut() {
+        pixel[0] = 255 - pixel[0];
+    }
+}
+
+pub(super) fn adjust_brightness(image: &mut DynamicImage, delta: i16) {
+    luminance(image);
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+    for pixel in luma_image.pixels_mut() {
+        let adjusted_tone = pixel[0] as i16 + delta;
+        pixel[0] = adjusted_tone.clamp(0, 255) as u8;
+    }
+}
+
+pub(super) fn adjust_contrast(image: &mut DynamicImage, factor: f64) {
+    luminance(image);
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+    for pixel in luma_image.pixels_mut() {
+        let adjusted_tone = pixel[0] as f64 * factor;
+        pixel[0] = adjusted_tone.round().clamp(0.0, 255.0) as u8;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +162,42 @@ mod tests {
         let gray = img.as_luma8().unwrap();
         assert_eq!(gray.get_pixel(0, 0)[0], 10);
         assert_eq!(gray.get_pixel(1, 0)[0], 200);
+    }
+
+    #[test]
+    fn negative_computes_255_minus_the_original_tone() {
+        let mut img = make_gray_image(3, 1, &[0, 100, 255]);
+        negative(&mut img);
+        let gray = img.as_luma8().unwrap();
+        assert_eq!(gray.get_pixel(0, 0)[0], 255);
+        assert_eq!(gray.get_pixel(1, 0)[0], 155);
+        assert_eq!(gray.get_pixel(2, 0)[0], 0);
+    }
+
+    #[test]
+    fn adjust_brightness_clamps_at_both_ends_of_the_range() {
+        let mut img = make_gray_image(3, 1, &[0, 100, 255]);
+        adjust_brightness(&mut img, -50);
+        let gray = img.as_luma8().unwrap();
+        assert_eq!(gray.get_pixel(0, 0)[0], 0); // 0 - 50 clamps to 0
+        assert_eq!(gray.get_pixel(1, 0)[0], 50);
+        assert_eq!(gray.get_pixel(2, 0)[0], 205);
+
+        let mut img = make_gray_image(3, 1, &[0, 100, 255]);
+        adjust_brightness(&mut img, 50);
+        let gray = img.as_luma8().unwrap();
+        assert_eq!(gray.get_pixel(0, 0)[0], 50);
+        assert_eq!(gray.get_pixel(1, 0)[0], 150);
+        assert_eq!(gray.get_pixel(2, 0)[0], 255); // 255 + 50 clamps to 255
+    }
+
+    #[test]
+    fn adjust_contrast_clamps_at_255() {
+        let mut img = make_gray_image(3, 1, &[10, 100, 200]);
+        adjust_contrast(&mut img, 2.0);
+        let gray = img.as_luma8().unwrap();
+        assert_eq!(gray.get_pixel(0, 0)[0], 20);
+        assert_eq!(gray.get_pixel(1, 0)[0], 200);
+        assert_eq!(gray.get_pixel(2, 0)[0], 255); // 200 * 2.0 = 400, clamps to 255
     }
 }

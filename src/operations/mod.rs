@@ -11,6 +11,9 @@ pub enum Operation {
     MirrorVertical,
     Luminance,
     Quantize(u16),
+    Negative,
+    Brightness(i16),
+    Contrast(f64),
     Convolve(Kernel),
 }
 
@@ -25,6 +28,9 @@ impl Operation {
                 point::luminance(image);
                 point::quantize(image, *levels);
             }
+            Operation::Negative => point::negative(image),
+            Operation::Brightness(delta) => point::adjust_brightness(image, *delta),
+            Operation::Contrast(factor) => point::adjust_contrast(image, *factor),
             Operation::Convolve(kernel) => convolution::convolve(image, kernel),
         }
     }
