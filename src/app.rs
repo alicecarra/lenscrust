@@ -1,7 +1,7 @@
 use image::{DynamicImage, ImageReader};
 
 use crate::errors::AppError;
-use crate::operations::{compute_histogram, Kernel, Operation};
+use crate::operations::{Kernel, Operation, compute_histogram};
 
 const IDENTITY_KERNEL: [[f64; 3]; 3] = [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]];
 
@@ -86,6 +86,7 @@ pub struct App {
     custom_convolution_weights: [[f64; 3]; 3],
 
     histogram: Option<[u32; 256]>,
+    loaded_histogram: Option<[u32; 256]>,
 
     last_error: Option<AppError>,
 }
@@ -103,6 +104,7 @@ impl Default for App {
             convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
             custom_convolution_weights: IDENTITY_KERNEL,
             histogram: None,
+            loaded_histogram: None,
             last_error: None,
         }
     }
@@ -112,6 +114,31 @@ fn to_color_image(image: &DynamicImage) -> egui::ColorImage {
     let size = [image.width() as usize, image.height() as usize];
     let rgba = image.to_rgba8();
     egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_flat_samples().as_slice())
+}
+
+fn render_histogram(ui: &mut egui::Ui, histogram: &[u32; 256]) {
+    const BAR_WIDTH: f32 = 2.0;
+
+    let max_count = histogram.iter().copied().max().unwrap_or(0).max(1) as f32;
+    let desired_size = egui::vec2(256.0 * BAR_WIDTH, 256.0);
+    let (rect, _response) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
+
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+
+    for (tone, &count) in histogram.iter().enumerate() {
+        let bar_height = (count as f32 / max_count) * rect.height();
+        let bar_top_left = egui::pos2(
+            rect.left() + tone as f32 * BAR_WIDTH,
+            rect.bottom() - bar_height,
+        );
+        let bar_bottom_right = egui::pos2(bar_top_left.x + BAR_WIDTH, rect.bottom());
+        painter.rect_filled(
+            egui::Rect::from_min_max(bar_top_left, bar_bottom_right),
+            0.0,
+            ui.visuals().text_color(),
+        );
+    }
 }
 
 impl App {
@@ -148,6 +175,7 @@ impl App {
             image_to_render,
             Default::default(),
         ));
+        self.loaded_histogram = Some(compute_histogram(&loaded_image));
         self.loaded.image = Some(loaded_image);
         self.reset_edited_image();
 
@@ -178,6 +206,12 @@ impl App {
             self.update_edited_texture(ctx);
             self.update_histogram();
         }
+    }
+
+    fn commit_edited_as_loaded(&mut self) {
+        self.loaded.image = self.edited.image.clone();
+        self.loaded.texture = self.edited.texture.clone();
+        self.loaded_histogram = self.histogram;
     }
 
     fn save_image(&mut self) -> Result<(), AppError> {
@@ -279,36 +313,18 @@ impl eframe::App for App {
                 });
         }
 
-        if let Some(histogram) = &self.histogram {
-            egui::Window::new("Histogram")
+        if let Some(histogram) = &self.loaded_histogram {
+            egui::Window::new("Original Histogram (Grayscale)")
                 .default_pos([440.0, 20.0])
                 .default_open(false)
-                .show(ui.ctx(), |ui| {
-                    const BAR_WIDTH: f32 = 2.0;
+                .show(ui.ctx(), |ui| render_histogram(ui, histogram));
+        }
 
-                    let max_count = histogram.iter().copied().max().unwrap_or(0).max(1) as f32;
-                    let desired_size = egui::vec2(256.0 * BAR_WIDTH, 256.0);
-                    let (rect, _response) =
-                        ui.allocate_exact_size(desired_size, egui::Sense::hover());
-
-                    let painter = ui.painter();
-                    painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
-
-                    for (tone, &count) in histogram.iter().enumerate() {
-                        let bar_height = (count as f32 / max_count) * rect.height();
-                        let bar_top_left = egui::pos2(
-                            rect.left() + tone as f32 * BAR_WIDTH,
-                            rect.bottom() - bar_height,
-                        );
-                        let bar_bottom_right =
-                            egui::pos2(bar_top_left.x + BAR_WIDTH, rect.bottom());
-                        painter.rect_filled(
-                            egui::Rect::from_min_max(bar_top_left, bar_bottom_right),
-                            0.0,
-                            ui.visuals().text_color(),
-                        );
-                    }
-                });
+        if let Some(histogram) = &self.histogram {
+            egui::Window::new("Edited Histogram (Grayscale)")
+                .default_pos([440.0, 60.0])
+                .default_open(false)
+                .show(ui.ctx(), |ui| render_histogram(ui, histogram));
         }
 
         egui::Window::new("File")
@@ -328,11 +344,23 @@ impl eframe::App for App {
                             self.last_error = Some(err);
                         }
                     }
+                });
+
+                ui.horizontal(|ui| {
                     if ui
                         .add_enabled(self.loaded.is_some(), egui::Button::new("Reset to loaded"))
                         .clicked()
                     {
                         self.reset_edited_image();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.edited.is_some(),
+                            egui::Button::new("Commit as Original"),
+                        )
+                        .clicked()
+                    {
+                        self.commit_edited_as_loaded();
                     }
                 });
 
@@ -397,6 +425,12 @@ impl eframe::App for App {
                             ui.ctx(),
                             Operation::Quantize(self.quantization_levels),
                         );
+                    }
+
+                    ui.separator();
+
+                    if ui.button("Equalize Histogram").clicked() {
+                        self.apply_operation(ui.ctx(), Operation::EqualizeHistogram);
                     }
 
                     ui.separator();

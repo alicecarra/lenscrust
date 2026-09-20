@@ -18,6 +18,7 @@ pub enum Operation {
     Negative,
     Brightness(i16),
     Contrast(f64),
+    EqualizeHistogram,
     Convolve(Kernel),
 }
 
@@ -37,6 +38,7 @@ impl Operation {
             Operation::Negative => point::negative(image),
             Operation::Brightness(delta) => point::adjust_brightness(image, *delta),
             Operation::Contrast(factor) => point::adjust_contrast(image, *factor),
+            Operation::EqualizeHistogram => histogram::equalize_histogram(image),
             Operation::Convolve(kernel) => convolution::convolve(image, kernel),
         }
     }

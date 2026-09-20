@@ -13,6 +13,29 @@ pub fn compute_histogram(image: &DynamicImage) -> [u32; 256] {
     histogram
 }
 
+pub(super) fn equalize_histogram(image: &mut DynamicImage) {
+    super::point::luminance(image);
+
+    let histogram = compute_histogram(image);
+    let total_pixel_count: u32 = histogram.iter().sum();
+    if total_pixel_count == 0 {
+        return;
+    }
+
+    let mut cumulative_count = 0u32;
+    let mut tone_mapping = [0u8; 256];
+    for tone in 0..256 {
+        cumulative_count += histogram[tone];
+        let equalized_tone = (cumulative_count as f64 * 255.0 / total_pixel_count as f64).round();
+        tone_mapping[tone] = equalized_tone as u8;
+    }
+
+    let luma_image = image.as_mut_luma8().expect("Image not in luma!!!");
+    for pixel in luma_image.pixels_mut() {
+        pixel[0] = tone_mapping[pixel[0] as usize];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,5 +77,20 @@ mod tests {
         let histogram = compute_histogram(&image);
         assert_eq!(histogram[76], 1);
         assert_eq!(histogram.iter().sum::<u32>(), 1);
+    }
+
+    #[test]
+    fn equalize_histogram_remaps_tones_by_cumulative_distribution() {
+        // histogram: 0 -> 2, 128 -> 1, 255 -> 1, total = 4
+        // tone 0:   cumulative 2, round(2 * 255 / 4) = round(127.5) = 128
+        // tone 128: cumulative 3, round(3 * 255 / 4) = round(191.25) = 191
+        // tone 255: cumulative 4, round(4 * 255 / 4) = round(255.0) = 255
+        let mut image = make_gray_image(4, 1, &[0, 0, 128, 255]);
+        equalize_histogram(&mut image);
+        let gray_image = image.as_luma8().unwrap();
+        assert_eq!(gray_image.get_pixel(0, 0)[0], 128);
+        assert_eq!(gray_image.get_pixel(1, 0)[0], 128);
+        assert_eq!(gray_image.get_pixel(2, 0)[0], 191);
+        assert_eq!(gray_image.get_pixel(3, 0)[0], 255);
     }
 }
