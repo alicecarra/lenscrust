@@ -273,13 +273,36 @@ impl eframe::App for App {
         egui::Window::new("Controls")
             .default_pos([20.0, 20.0])
             .show(ui.ctx(), |ui| {
-                ui.add_enabled_ui(self.loaded.is_some(), |ui| {
-                    if ui.button("Reset").clicked() {
+                ui.horizontal(|ui| {
+                    if ui.button("Load Image").clicked() {
+                        if let Err(err) = self.load_image(ui) {
+                            self.last_error = Some(err);
+                        }
+                    }
+                    if ui
+                        .add_enabled(self.edited.is_some(), egui::Button::new("Save Image"))
+                        .clicked()
+                    {
+                        if let Err(err) = self.save_image() {
+                            self.last_error = Some(err);
+                        }
+                    }
+                    if ui
+                        .add_enabled(self.loaded.is_some(), egui::Button::new("Reset to loaded"))
+                        .clicked()
+                    {
                         self.reset_edited_image();
                     }
+                });
 
-                    ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label("JPEG quality:");
+                    ui.add(egui::Slider::new(&mut self.jpeg_quality, 1..=100));
+                });
 
+                ui.separator();
+
+                ui.add_enabled_ui(self.loaded.is_some(), |ui| {
                     if ui.button("Mirror Horizontal").clicked() {
                         self.apply_operation(ui.ctx(), Operation::MirrorHorizontal);
                     }
@@ -306,7 +329,10 @@ impl eframe::App for App {
                         ui.add(egui::Slider::new(&mut self.brightness_delta, -255..=255));
                     });
                     if ui.button("Apply Brightness").clicked() {
-                        self.apply_operation(ui.ctx(), Operation::Brightness(self.brightness_delta));
+                        self.apply_operation(
+                            ui.ctx(),
+                            Operation::Brightness(self.brightness_delta),
+                        );
                     }
 
                     ui.horizontal(|ui| {
@@ -367,13 +393,6 @@ impl eframe::App for App {
                             .to_kernel(self.custom_convolution_weights);
                         self.apply_operation(ui.ctx(), Operation::Convolve(kernel));
                     }
-
-                    ui.separator();
-
-                    ui.horizontal(|ui| {
-                        ui.label("JPEG quality:");
-                        ui.add(egui::Slider::new(&mut self.jpeg_quality, 1..=100));
-                    });
                 });
             });
     }
