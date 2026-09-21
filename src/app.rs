@@ -92,6 +92,8 @@ pub struct App {
     histogram: Option<[u32; 256]>,
     loaded_histogram: Option<[u32; 256]>,
 
+    history: Vec<Operation>,
+
     last_error: Option<AppError>,
 }
 
@@ -112,6 +114,7 @@ impl Default for App {
             custom_convolution_weights: IDENTITY_KERNEL,
             histogram: None,
             loaded_histogram: None,
+            history: Vec::new(),
             last_error: None,
         }
     }
@@ -218,6 +221,7 @@ impl App {
         self.edited.image = self.loaded.image.clone();
         self.edited.texture = self.loaded.texture.clone();
         self.update_histogram();
+        self.history.clear();
     }
 
     fn update_histogram(&mut self) {
@@ -233,17 +237,20 @@ impl App {
     }
 
     fn apply_operation(&mut self, ctx: &egui::Context, operation: Operation) {
-        if let Some(image) = self.edited.image.as_mut() {
-            operation.apply(image);
-            self.update_edited_texture(ctx);
-            self.update_histogram();
-        }
+        let Some(image) = self.edited.image.as_mut() else {
+            return;
+        };
+        operation.apply(image);
+        self.update_edited_texture(ctx);
+        self.update_histogram();
+        self.history.push(operation);
     }
 
     fn commit_edited_as_loaded(&mut self) {
         self.loaded.image = self.edited.image.clone();
         self.loaded.texture = self.edited.texture.clone();
         self.loaded_histogram = self.histogram;
+        self.history.clear();
     }
 
     fn save_image(&mut self) -> Result<(), AppError> {
@@ -371,6 +378,22 @@ impl eframe::App for App {
                 .default_pos([440.0, 60.0])
                 .default_open(false)
                 .show(ui.ctx(), |ui| render_histogram(ui, histogram));
+        }
+
+        if !self.history.is_empty() {
+            egui::Window::new("History")
+                .default_pos([780.0, 20.0])
+                .default_open(false)
+                .show(ui.ctx(), |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("history_scroll")
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            for (index, operation) in self.history.iter().enumerate() {
+                                ui.label(format!("{}. {}", index + 1, operation.label()));
+                            }
+                        });
+                });
         }
 
         egui::Window::new("File")

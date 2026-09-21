@@ -50,4 +50,26 @@ impl Operation {
             Operation::Convolve(kernel) => convolution::convolve(image, kernel),
         }
     }
+
+    // for now used in history
+    pub fn label(&self) -> String {
+        match self {
+            Operation::MirrorHorizontal => "Mirror Horizontal".to_string(),
+            Operation::MirrorVertical => "Mirror Vertical".to_string(),
+            Operation::RotateClockwise => "Rotate 90° Clockwise".to_string(),
+            Operation::RotateCounterclockwise => "Rotate 90° Counterclockwise".to_string(),
+            Operation::ZoomOut { factor_x, factor_y } => {
+                format!("Zoom Out ({factor_x:.2}x, {factor_y:.2}y)")
+            }
+            Operation::ZoomIn => "Zoom In (2x2)".to_string(),
+            Operation::Luminance => "Luminance".to_string(),
+            Operation::Quantize(levels) => format!("Quantize ({levels} levels)"),
+            Operation::Negative => "Negative".to_string(),
+            Operation::Brightness(delta) => format!("Brightness ({delta:+})"),
+            Operation::Contrast(factor) => format!("Contrast ({factor:.2}x)"),
+            Operation::EqualizeHistogram => "Equalize Histogram".to_string(),
+            Operation::MatchHistogram(_) => "Match Histogram".to_string(),
+            Operation::Convolve(_) => "Convolve".to_string(),
+        }
+    }
 }
