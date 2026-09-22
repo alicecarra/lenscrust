@@ -48,8 +48,10 @@ impl Kernel {
 }
 
 pub fn convolve(image: &mut DynamicImage, kernel: &Kernel) {
-    // TODO: suppoert color images
-    super::point::luminance(image);
+    // only gaussian low pass with color images
+    if *kernel != Kernel::GAUSSIAN_LOW_PASS {
+        super::point::luminance(image);
+    }
 
     let (image_width, image_height) = image.dimensions();
     if image_width < 3 || image_height < 3 {
@@ -184,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn convolve_always_forces_grayscale() {
+    fn convolve_forces_grayscale_unless_the_kernel_supports_color() {
         let mut color_image = make_rgb_image(
             3,
             3,
@@ -204,5 +206,18 @@ mod tests {
         convolve(&mut color_image, &Kernel::POSITIVE_LAPLACIAN_HIGH_PASS);
 
         assert!(color_image.as_luma8().is_some());
+    }
+
+    #[test]
+    fn convolve_preserves_color_when_the_kernel_supports_it() {
+        // the Gaussian weights sum to 1.0, so a uniformly-colored image
+        // should come out of the blur unchanged, on every channel
+        let mut color_image = make_rgb_image(3, 3, &[[10, 20, 30]; 9]);
+
+        convolve(&mut color_image, &Kernel::GAUSSIAN_LOW_PASS);
+
+        assert!(color_image.as_luma8().is_none());
+        let rgb_image = color_image.to_rgb8();
+        assert_eq!(rgb_image.get_pixel(1, 1).0, [10, 20, 30]);
     }
 }
