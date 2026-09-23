@@ -88,6 +88,7 @@ pub struct App {
 
     convolution_kernel_choice: ConvolutionKernelType,
     custom_convolution_weights: [[f64; 3]; 3],
+    convolution_bias_before_clamping: bool,
 
     histogram: Option<[u32; 256]>,
     loaded_histogram: Option<[u32; 256]>,
@@ -112,6 +113,7 @@ impl Default for App {
             zoom_out_factor_y: 2.0,
             convolution_kernel_choice: ConvolutionKernelType::GaussianLowPass,
             custom_convolution_weights: IDENTITY_KERNEL,
+            convolution_bias_before_clamping: false,
             histogram: None,
             loaded_histogram: None,
             history: Vec::new(),
@@ -552,6 +554,7 @@ impl eframe::App for App {
 
                     ui.horizontal(|ui| {
                         ui.label("Convolution kernel:");
+                        let previous_kernel_choice = self.convolution_kernel_choice;
                         egui::ComboBox::from_id_salt("convolution_kernel_choice")
                             .selected_text(self.convolution_kernel_choice.label())
                             .show_ui(ui, |ui| {
@@ -563,6 +566,12 @@ impl eframe::App for App {
                                     );
                                 }
                             });
+                        if self.convolution_kernel_choice != previous_kernel_choice {
+                            self.convolution_bias_before_clamping = self
+                                .convolution_kernel_choice
+                                .to_kernel(self.custom_convolution_weights)
+                                .bias_before_clamping;
+                        }
                     });
                     if self.convolution_kernel_choice == ConvolutionKernelType::Custom {
                         egui::Grid::new("custom_convolution_kernel_3x3_grid").show(ui, |ui| {
@@ -579,10 +588,15 @@ impl eframe::App for App {
                             }
                         });
                     }
+                    ui.checkbox(
+                        &mut self.convolution_bias_before_clamping,
+                        "Add +127 bias before clamping",
+                    );
                     if ui.button("Apply Convolution").clicked() {
-                        let kernel = self
+                        let mut kernel = self
                             .convolution_kernel_choice
                             .to_kernel(self.custom_convolution_weights);
+                        kernel.bias_before_clamping = self.convolution_bias_before_clamping;
                         self.apply_operation(ui.ctx(), Operation::Convolve(kernel));
                     }
                 });
